@@ -1,0 +1,7 @@
+Run the following command to start up the application locally:
+
+docker-compose -f docker-compose-dev.yml up --build
+
+
+# docker build -t react-vite-app:1 -f Dockerfile .
+# docker run -p 8080:80 react-vite-app:1
