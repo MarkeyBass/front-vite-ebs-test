@@ -1,0 +1,10 @@
+docker build -t react-app:1 -f Dockerfile.dev .
+
+docker run -p 3000:3000 -v /app/node_modules -v $(pwd):/app react-app:1
+
+docker run react-app:1 npm run test
+docker run -it react-app:1 npm run test
+
+
+
+docker exec -it frontend-web-app-1 npm run test
