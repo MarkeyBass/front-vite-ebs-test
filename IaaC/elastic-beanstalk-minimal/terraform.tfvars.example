@@ -1,0 +1,10 @@
+aws_region        = "us-east-1"
+project_name      = "frontend-vite-demo"
+environment_name  = "frontend-vite-demo-env"
+instance_type     = "t3.micro"
+
+tags = {
+  Owner    = "mark"
+  Lifespan = "temporary"
+  Purpose  = "learning"
+}

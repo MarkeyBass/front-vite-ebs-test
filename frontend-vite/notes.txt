@@ -5,3 +5,10 @@ docker-compose -f docker-compose-dev.yml up --build
 
 # docker build -t react-vite-app:1 -f Dockerfile .
 # docker run -p 8080:80 react-vite-app:1
+
+
+
+
+# Verify that tests are running:
+docker build -f Dockerfile.dev -t react-vite-dev:1 .
+docker run --rm -e CI=true react-vite-dev:1 npm test

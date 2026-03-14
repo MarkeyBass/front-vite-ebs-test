@@ -22,8 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-      - run: docker build -t rallycoding/react-test-vite -f Dockerfile.dev .
-      - run: docker run -e CI=true rallycoding/react-test-vite npm test
+      - run: docker build -t markeybass/react-test-vite -f Dockerfile.dev .
+      - run: docker run -e CI=true markeybass/react-test-vite npm test
 
       - name: Generate deployment package
         run: zip -r deploy.zip . -x '*.git*'
@@ -95,13 +95,13 @@ Security note:
 - Passing password with `-p` can expose it in process arguments.
 - Safer pattern is `--password-stdin`.
 
-#### `- run: docker build -t rallycoding/react-test-vite -f Dockerfile.dev .`
+#### `- run: docker build -t markeybass/react-test-vite -f Dockerfile.dev .`
 
 - Builds an image from `Dockerfile.dev`.
-- Tags the image as `rallycoding/react-test-vite`.
+- Tags the image as `markeybass/react-test-vite`.
 - `.` means current directory is build context.
 
-#### `- run: docker run -e CI=true rallycoding/react-test-vite npm test`
+#### `- run: docker run -e CI=true markeybass/react-test-vite npm test`
 
 - Starts a container from the built image.
 - Runs tests (`npm test`) inside that container.
