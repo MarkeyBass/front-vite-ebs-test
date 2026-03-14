@@ -7,14 +7,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      APP_DIR: frontend-vite
+      DEPLOY_ZIP: deploy.zip
     steps:
       - uses: actions/checkout@v6
       - run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-      - run: docker build -t markeybass/react-test-vite -f ./frontend-vite/Dockerfile.dev .
-      - run: docker run -e CI=true markeybass/react-test-vite npm test
+      - run: docker build -t markeybass/react-test-vite -f Dockerfile.dev .
+        working-directory: ${{ env.APP_DIR }}
+      - run: docker run --rm -e CI=true markeybass/react-test-vite npm test
 
       # - name: Generate deployment package
-      #   run: zip -r deploy.zip . -x '*.git*'
+      #   run: zip -r ${{ env.DEPLOY_ZIP }} . -x '*.git*'
+      #   working-directory: ${{ env.APP_DIR }}
       # - name: Deploy to EB
       #   uses: einaregilsson/beanstalk-deploy@v21
       #   with:
@@ -25,4 +30,4 @@ jobs:
       #     existing_bucket_name: elasticbeanstalk-us-east-1-923445559289
       #     region: us-east-1
       #     version_label: ${{ github.sha }}
-      #     deployment_package: deploy.zip
+      #     deployment_package: ${{ env.APP_DIR }}/${{ env.DEPLOY_ZIP }}
