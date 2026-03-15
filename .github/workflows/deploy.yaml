@@ -28,6 +28,6 @@ jobs:
           application_name: frontend
           environment_name: Frontend-env
           existing_bucket_name: frontend-vite-demo-504406221982-us-west-2-eb-artifacts
-          region: us-east-1
+          region: us-west-2
           version_label: ${{ github.sha }}
           deployment_package: ${{ env.APP_DIR }}/${{ env.DEPLOY_ZIP }}
