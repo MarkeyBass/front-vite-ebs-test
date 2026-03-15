@@ -1,6 +1,6 @@
 # GitHub Actions Explanation for `deploy.yaml`
 
-This guide explains your workflow file:
+This guide explains your current workflow file:
 
 - Path: `.github/workflows/deploy.yaml`
 - Goal: run CI checks for the frontend and deploy to AWS Elastic Beanstalk on pushes to `main`
@@ -19,14 +19,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      APP_DIR: frontend-vite
+      DEPLOY_ZIP: deploy.zip
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
       - run: docker build -t markeybass/react-test-vite -f Dockerfile.dev .
-      - run: docker run -e CI=true markeybass/react-test-vite npm test
+        working-directory: ${{ env.APP_DIR }}
+      - run: docker run --rm -e CI=true markeybass/react-test-vite npm test
 
       - name: Generate deployment package
-        run: zip -r deploy.zip . -x '*.git*'
+        run: zip -r ${{ env.DEPLOY_ZIP }} . -x '*.git*'
+        working-directory: ${{ env.APP_DIR }}
       - name: Deploy to EB
         uses: einaregilsson/beanstalk-deploy@v21
         with:
@@ -37,7 +42,7 @@ jobs:
           existing_bucket_name: elasticbeanstalk-us-east-1-923445559289
           region: us-east-1
           version_label: ${{ github.sha }}
-          deployment_package: deploy.zip
+          deployment_package: ${{ env.APP_DIR }}/${{ env.DEPLOY_ZIP }}
 ```
 
 ---
@@ -58,11 +63,13 @@ Why this matters:
 
 ---
 
-### 2) Jobs and runner
+### 2) Job-level settings and runner
 
 - `jobs:` starts one or more jobs.
 - `build:` is the job ID (internal identifier).
 - `runs-on: ubuntu-latest` picks a GitHub-hosted Linux VM.
+- `env.APP_DIR: frontend-vite` stores your monorepo app path once and reuses it in steps.
+- `env.DEPLOY_ZIP: deploy.zip` stores the artifact name so it is not duplicated in multiple lines.
 
 Important behavior:
 - A job runs in a fresh ephemeral runner.
@@ -74,7 +81,7 @@ Important behavior:
 
 Steps execute sequentially in the same job environment.
 
-#### `- uses: actions/checkout@v3`
+#### `- uses: actions/checkout@v6`
 
 - This action checks out your repo code into the runner workspace.
 - Without this, Docker build/test and zip commands would not find your files.
@@ -95,17 +102,18 @@ Security note:
 - Passing password with `-p` can expose it in process arguments.
 - Safer pattern is `--password-stdin`.
 
-#### `- run: docker build -t markeybass/react-test-vite -f Dockerfile.dev .`
+#### `- run: docker build -t markeybass/react-test-vite -f Dockerfile.dev .` with `working-directory: ${{ env.APP_DIR }}`
 
 - Builds an image from `Dockerfile.dev`.
 - Tags the image as `markeybass/react-test-vite`.
-- `.` means current directory is build context.
+- `.` means current directory is build context, and because `working-directory` is `frontend-vite`, Docker can resolve `COPY package.json .` correctly.
 
-#### `- run: docker run -e CI=true markeybass/react-test-vite npm test`
+#### `- run: docker run --rm -e CI=true markeybass/react-test-vite npm test`
 
 - Starts a container from the built image.
 - Runs tests (`npm test`) inside that container.
 - `CI=true` typically makes test runners non-interactive and stricter for CI.
+- `--rm` auto-removes the test container after it exits.
 
 This gives you a reproducible CI test environment.
 
@@ -115,11 +123,12 @@ This gives you a reproducible CI test environment.
 
 #### `Generate deployment package`
 
-- `zip -r deploy.zip . -x '*.git*'` creates a deployment zip archive.
+- `zip -r ${{ env.DEPLOY_ZIP }} . -x '*.git*'` creates a deployment zip archive.
 - Excludes `.git`-related files.
+- Because it runs with `working-directory: ${{ env.APP_DIR }}`, the zip is created inside `frontend-vite`.
 
 What it does in pipeline terms:
-- Produces an artifact (`deploy.zip`) that the deployment action can upload.
+- Produces an artifact (`frontend-vite/deploy.zip`) that the deployment action can upload.
 
 ---
 
@@ -137,7 +146,7 @@ Inputs explained:
 - `existing_bucket_name`: S3 bucket EB uses for app versions.
 - `region`: AWS region.
 - `version_label: ${{ github.sha }}`: version identifier = commit SHA.
-- `deployment_package: deploy.zip`: artifact to deploy.
+- `deployment_package: ${{ env.APP_DIR }}/${{ env.DEPLOY_ZIP }}`: artifact path in this monorepo layout.
 
 Why `github.sha` is useful:
 - Every deployment maps directly to a commit, improving traceability and rollback clarity.
@@ -162,9 +171,9 @@ From Context7 docs, these are canonical GitHub Actions contexts and workflow syn
 2. Creates Ubuntu runner.
 3. Checks out repo.
 4. Logs into Docker.
-5. Builds app image from `Dockerfile.dev`.
+5. Builds app image from `frontend-vite/Dockerfile.dev` by using `working-directory`.
 6. Runs tests inside container.
-7. Zips project as `deploy.zip`.
+7. Creates `frontend-vite/deploy.zip` for deployment.
 8. Deploys that zip to AWS Elastic Beanstalk with a commit-SHA version label.
 
 ---
@@ -174,7 +183,7 @@ From Context7 docs, these are canonical GitHub Actions contexts and workflow syn
 If you want to level this workflow up, next concepts to study are:
 
 1. Use `--password-stdin` for Docker login (safer secret handling).
-2. Pin actions to newer versions (`actions/checkout@v4` or later) and/or commit SHA pinning.
+2. Keep actions updated and/or pin to commit SHA for stronger supply chain safety.
 3. Add `permissions:` explicitly (least privilege).
 4. Add dependency caching or Docker layer caching for faster builds.
 5. Add branch protection so only successful workflows can merge to `main`.

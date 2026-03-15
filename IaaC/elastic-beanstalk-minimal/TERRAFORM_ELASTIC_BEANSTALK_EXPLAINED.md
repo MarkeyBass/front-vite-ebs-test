@@ -2,7 +2,7 @@
 
 This folder gives you a minimal, destroy-friendly Elastic Beanstalk setup:
 
-- `main.tf` - provider, IAM roles, EB application, EB environment
+- `main.tf` - provider, IAM roles, EB application/environment, and deployment S3 bucket
 - `variables.tf` - configurable inputs
 - `outputs.tf` - important values after apply
 
@@ -65,7 +65,37 @@ locals {
 
 ---
 
-## 3) Auto-select latest Docker solution stack
+## 3) Deployment S3 bucket (with force delete)
+
+This project now manages a dedicated artifacts bucket for EB uploads:
+
+```hcl
+data "aws_caller_identity" "current" {}
+
+locals {
+  deployment_bucket_name = var.deployment_bucket_name != "" ? var.deployment_bucket_name : "${var.project_name}-${data.aws_caller_identity.current.account_id}-${var.aws_region}-eb-artifacts"
+}
+
+resource "aws_s3_bucket" "deployment_artifacts" {
+  bucket        = local.deployment_bucket_name
+  force_destroy = var.deployment_bucket_force_destroy
+  tags          = local.common_tags
+}
+```
+
+What this gives you:
+
+- Auto-generated unique bucket name per account/region (unless you set one manually).
+- Optional one-command cleanup when `deployment_bucket_force_destroy = true`.
+- Better ownership than relying on shared/default EB buckets.
+
+Security hardening is also applied:
+
+- `aws_s3_bucket_public_access_block` blocks public ACLs/policies.
+
+---
+
+## 4) Auto-select latest Docker solution stack
 
 ```hcl
 data "aws_elastic_beanstalk_solution_stack" "docker" {
@@ -83,7 +113,7 @@ This data source pattern comes from AWS provider docs via Context7.
 
 ---
 
-## 4) IAM for EC2 instances in your environment
+## 5) IAM for EC2 instances in your environment
 
 Your Beanstalk EC2 instances need an instance profile + role.
 
@@ -102,14 +132,14 @@ Why:
 
 ---
 
-## 5) IAM service role for Elastic Beanstalk service itself
+## 6) IAM service role for Elastic Beanstalk service itself
 
 You also create:
 
 - `aws_iam_role.eb_service_role` (trusted by `elasticbeanstalk.amazonaws.com`)
 - policy attachments:
-  - `AWSElasticBeanstalkEnhancedHealth`
-  - `AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy`
+  - `arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth`
+  - `arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy`
 
 Why:
 
@@ -117,7 +147,7 @@ Why:
 
 ---
 
-## 6) Elastic Beanstalk application and environment
+## 7) Elastic Beanstalk application and environment
 
 ```hcl
 resource "aws_elastic_beanstalk_application" "this" {
@@ -151,7 +181,7 @@ Option settings used:
 
 ---
 
-## 7) Outputs
+## 8) Outputs
 
 `outputs.tf` returns:
 
@@ -159,12 +189,18 @@ Option settings used:
 - environment name
 - environment CNAME URL
 - selected solution stack name
+- deployment bucket name
 
 So after `apply` you can immediately see where to test.
 
+Use `deployment_bucket_name` output in your GitHub Actions workflow:
+
+- `.github/workflows/deploy.yaml`
+- `existing_bucket_name: <deployment_bucket_name output>`
+
 ---
 
-## Variables and what to change first
+## 9) Variables and what to change first
 
 In `variables.tf`, the fastest things to customize are:
 
@@ -172,40 +208,64 @@ In `variables.tf`, the fastest things to customize are:
 - `environment_name`
 - `aws_region`
 - `instance_type`
+- `deployment_bucket_name` (optional override)
+- `deployment_bucket_force_destroy` (set true for one-command sandbox cleanup)
 - `tags`
 
 Defaults are set to be friendly for a demo/sandbox.
 
 ---
 
-## How to run it
+## 10) How to run it
 
 From the folder `IaaC/elastic-beanstalk-minimal`:
 
 ```bash
-terraform init
-terraform plan
-terraform apply
+AWS_PROFILE=terraform-2026 terraform init
+AWS_PROFILE=terraform-2026 terraform plan
+AWS_PROFILE=terraform-2026 terraform apply
 ```
 
 When finished and you want to remove everything:
 
 ```bash
-terraform destroy
+AWS_PROFILE=terraform-2026 terraform destroy
 ```
 
 ---
 
-## Important cleanup and safety notes
+## 11) Important cleanup and safety notes
 
 1. Destroy removes only resources tracked in Terraform state.
 2. If you manually change resources in console, destroy can become messy (drift).
 3. Always verify no extra manually-created resources remain in AWS after destroy.
 4. For team/shared usage, store Terraform state remotely (S3 + DynamoDB lock).
 
+Also keep region/account alignment consistent:
+
+- `terraform.tfvars` currently uses `aws_region = "us-west-2"`.
+- `.github/workflows/deploy.yaml` must use the same region.
+- `existing_bucket_name` in GitHub Actions should be the Terraform output `deployment_bucket_name`.
+
 ---
 
-## How this maps to your current GitHub Actions flow
+## 12) Common first-run errors
+
+1. **`terraform output` shows no outputs**
+   - Cause: you ran `plan` but not `apply`.
+   - Fix: run `terraform apply` first, then `terraform output`.
+
+2. **IAM `AccessDenied` (for `CreateRole`)**
+   - Cause: deploy user lacks IAM permissions.
+   - Fix: grant IAM role/instance-profile create+attach permissions.
+
+3. **Managed policy `NoSuchEntity` for EB managed updates**
+   - Cause: wrong policy ARN variant.
+   - Fix: use `arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy`.
+
+---
+
+## 13) How this maps to your current GitHub Actions flow
 
 Your existing deploy workflow expects an EB application/environment to exist.
 This Terraform setup provides that infrastructure baseline, so your CI/CD can deploy consistently.

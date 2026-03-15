@@ -13,7 +13,11 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
+  deployment_bucket_name = var.deployment_bucket_name != "" ? var.deployment_bucket_name : "${var.project_name}-${data.aws_caller_identity.current.account_id}-${var.aws_region}-eb-artifacts"
+
   common_tags = merge(
     {
       Project     = var.project_name
@@ -41,6 +45,21 @@ data "aws_iam_policy_document" "eb_ec2_assume_role" {
       identifiers = ["ec2.amazonaws.com"]
     }
   }
+}
+
+resource "aws_s3_bucket" "deployment_artifacts" {
+  bucket        = local.deployment_bucket_name
+  force_destroy = var.deployment_bucket_force_destroy
+  tags          = local.common_tags
+}
+
+resource "aws_s3_bucket_public_access_block" "deployment_artifacts" {
+  bucket = aws_s3_bucket.deployment_artifacts.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 resource "aws_iam_role" "eb_ec2_role" {
@@ -96,7 +115,7 @@ resource "aws_iam_role_policy_attachment" "eb_enhanced_health" {
 
 resource "aws_iam_role_policy_attachment" "eb_managed_updates" {
   role       = aws_iam_role.eb_service_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy"
+  policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy"
 }
 
 resource "aws_elastic_beanstalk_application" "this" {

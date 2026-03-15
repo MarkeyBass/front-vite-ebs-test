@@ -30,3 +30,15 @@ variable "tags" {
     Lifespan = "temporary"
   }
 }
+
+variable "deployment_bucket_name" {
+  description = "Optional custom S3 bucket name for Elastic Beanstalk deployment artifacts. Leave empty to auto-generate."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_bucket_force_destroy" {
+  description = "If true, Terraform can delete the deployment bucket even when it contains objects."
+  type        = bool
+  default     = true
+}
